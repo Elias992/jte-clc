@@ -12,23 +12,29 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .card{width:100%;max-width:440px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:24px;text-align:center}
-#prog{font-size:13px;color:var(--mut);margin-bottom:8px}
+#prog{font-size:13px;color:var(--mut);margin-bottom:8px;padding:4px;user-select:none}
 h1{font-size:22px;margin:0 0 8px}
 p{margin:8px 0}
 .msg{min-height:1.5em;color:var(--bad);font-weight:600}
-.btn{display:inline-block;background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;margin-top:8px}
+.btn{display:inline-block;background:var(--ac);color:#fff;border:0;border-radius:10px;padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;margin:8px 6px 0 0}
+.btn.alt{background:transparent;color:var(--fg);border:2px solid var(--bd)}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
 .tile{font-size:32px;padding:14px 0;background:var(--bg);border:2px solid var(--bd);border-radius:10px;cursor:pointer}
 .tile.sel{border-color:var(--ac)}
 .arena{position:relative;height:200px;margin-top:12px;border:2px dashed var(--bd);border-radius:12px}
 .arena .btn{position:absolute;left:calc(50% - 60px);top:calc(50% - 22px);margin:0;transition:left .15s,top .15s;touch-action:none}
 input{width:100%;padding:10px;font:inherit;color:var(--fg);background:var(--bg);border:2px solid var(--bd);border-radius:10px;margin-top:8px}
-.btn{margin-right:6px}
-.btn.alt{background:transparent;color:var(--fg);border:2px solid var(--bd)}
 .row{display:flex;gap:6px;margin:6px 0}
 .row input{margin:0;min-width:0;flex:1}
 .row .btn{margin:0;padding:6px 10px}
 input.n{width:90px;display:inline-block;margin:0 0 0 6px}
+.big{font-size:40px;font-weight:800;margin:10px 0}
+.sim{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.pad{height:70px;border:0;border-radius:12px;opacity:.45;cursor:pointer}
+.pad.on{opacity:1;box-shadow:0 0 0 3px var(--fg)}
+.bar{height:14px;background:var(--bg);border:2px solid var(--bd);border-radius:8px;margin:12px 0;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ac)}
+#hb{touch-action:none;user-select:none;-webkit-user-select:none}
 </style>
 </head>
 <body>
@@ -36,46 +42,89 @@ input.n{width:90px;display:inline-block;margin:0 0 0 6px}
 <script type="application/json" id="state">{"timer":15,"links":[{"label":"Ouvrir le lien","url":"https://exemple.com"}]}</script>
 <script>
 var S=JSON.parse(document.getElementById("state").textContent);
-var U=null,A=null;
-var ready=(async function(){if(!window.claude)return;try{U=await claude.use("user")}catch(e){}try{A=await claude.use("artifact")}catch(e){}})();
+var A=null;
+(async function(){if(!window.claude)return;try{A=await claude.use("artifact")}catch(e){}})();
 var st=document.getElementById("stage"),pr=document.getElementById("prog");
-var fails=0,t0=Date.now(),timer=null,step=0;
-function show(n,html){step=n;pr.textContent="Étape "+n+" / 4";st.innerHTML=html}
-function msg(t){document.getElementById("m").textContent=t}
+var fails=0,t0=Date.now(),timer=null,seq=[],idx=0,cur="";
+function R(n){return Math.floor(Math.random()*n)}
+function pick(a){return a[R(a.length)]}
+function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=R(i+1),t=a[i];a[i]=a[j];a[j]=t}return a}
+function norm(s){return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")}
+function show(h){cur="";pr.textContent="Étape "+idx+" / "+seq.length;st.innerHTML=h}
+function msg(t){var m=document.getElementById("m");if(m)m.textContent=t}
+function next(){clearInterval(timer);idx++;if(idx>seq.length)return end();seq[idx-1]()}
+function start(){
+  fails=0;t0=Date.now();idx=0;
+  seq=shuf(P).slice(0,Math.max(1,Math.min(S.steps||5,P.length)));
+  next();
+}
 
-function s1(reset){
+/* admin : 7 clics rapides sur « Étape x / y » */
+var tc=0,tt=0;
+pr.onclick=function(){var n=Date.now();if(n-tt>2000)tc=0;tt=n;if(++tc>=7){tc=0;admin()}};
+
+function ask(h,gen,ok,m){
+  var g=gen();
+  show('<h1>'+h+'</h1><p>'+g.q+'</p><input id="a" autocomplete="off"><button class="btn" id="ok">Valider</button><p class="msg" id="m"></p>');
+  if(m)msg(m);
+  var i=document.getElementById("a");
+  function go(){if(g.chk(i.value.trim()))ok();else{fails++;ask(h,gen,ok,"Faux. On change la question 😈")}}
+  document.getElementById("ok").onclick=go;
+  i.onkeydown=function(e){if(e.key==="Enter")go()};
+}
+
+var RD=[
+["Plus j’en ai, moins je vois. Qui suis-je ?",["noir","obscurite","nuit","tenebres","noirceur"]],
+["Je parle sans bouche et j’entends sans oreilles. Qui suis-je ?",["echo"]],
+["Qu’est-ce qui monte mais ne descend jamais ?",["age"]],
+["Qu’est-ce qui a des touches mais n’ouvre aucune porte ?",["piano","clavier"]],
+["Plus on m’enlève, plus je deviens grand. Qui suis-je ?",["trou"]],
+["Qu’est-ce qui t’appartient mais que les autres utilisent plus que toi ?",["prenom","nom"]],
+["Je suis toujours devant toi mais tu ne peux jamais me voir. Qui suis-je ?",["futur","avenir"]],
+["Qu’est-ce qui se brise dès qu’on prononce son nom ?",["silence"]],
+["J’ai des villes sans maisons, des forêts sans arbres et de l’eau sans poissons. Qui suis-je ?",["carte"]],
+["Qu’est-ce qui mouille en séchant ?",["serviette","essuie"]]
+];
+var PH=["je ne suis pas un robot","le lien est juste derrière","tu vas galérer ici","abandonne pendant qu’il est temps"];
+var SQ=[["2, 4, 8, 16, ?","32"],["1, 1, 2, 3, 5, ?","8"],["3, 6, 9, 12, ?","15"],["1, 4, 9, 16, ?","25"],["100, 90, 80, 70, ?","60"],["2, 3, 5, 7, 11, ?","13"]];
+
+function pRiddle(){ask("Énigme",function(){var r=pick(RD);return{q:r[0],chk:function(v){var w=norm(v).split(/[^a-z]+/);return r[1].some(function(k){return w.indexOf(k)>-1})}}},next)}
+function pMath(){ask("Calcul mental",function(){var a=3+R(7),b=3+R(7),c=1+R(9),x=a*b+c;return{q:"Combien font "+a+" × "+b+" + "+c+" ? (indice : c’est pas "+(x+1)+")",chk:function(v){return v===String(x)}}},next)}
+function pRev(){ask("À l’envers",function(){var p=pick(PH),r=p.split("").reverse().join("");return{q:"Tape « "+p+" » à l’envers",chk:function(v){return v.toLowerCase()===r}}},next)}
+function pSeq(){ask("Logique",function(){var s=pick(SQ);return{q:"Complète la suite : "+s[0],chk:function(v){return v===s[1]}}},next)}
+
+function pTimer(reset){
   var n=S.timer;
-  if(n<=0)return s2();
-  show(1,'<h1>Patiente un peu…</h1><p>Le lien arrive dans <b id="n">'+n+'</b> secondes. Change pas d’onglet, sinon ça repart à zéro 😈</p><p class="msg" id="m"></p>');
+  if(n<=0)return next();
+  show('<h1>Patiente un peu…</h1><p>Le lien arrive dans <b id="n">'+n+'</b> secondes. Change pas d’onglet, sinon ça repart à zéro 😈</p><p class="msg" id="m"></p>');
+  cur="t";
   if(reset)msg("Tu as changé d’onglet. On recommence 😈");
   clearInterval(timer);
   timer=setInterval(function(){
     if(document.hidden)return;
     n--;document.getElementById("n").textContent=n;
-    if(n<=0){clearInterval(timer);s2()}
+    if(n<=0)next();
   },1000);
 }
-document.addEventListener("visibilitychange",function(){
-  if(document.hidden&&step===1){fails++;s1(true)}
-});
+document.addEventListener("visibilitychange",function(){if(document.hidden&&cur==="t"){fails++;pTimer(true)}});
 
-function s2(){
+function pCaptcha(){
   var tiles=["🌳","🚗","🏠","🚲","🌲","🛣️","🏢","🚌","🌳"],tries=0;
   var errs=["Faux. T’as raté des feux rouges.","Toujours faux. Regarde mieux, y’en a au moins un."];
-  show(2,'<h1>Vérif anti-robot</h1><p>Clique sur tous les <b>feux rouges</b>.</p><div class="grid">'+tiles.map(function(t){return '<button class="tile">'+t+'</button>'}).join("")+'</div><button class="btn" id="v">Vérifier</button><p class="msg" id="m"></p>');
+  show('<h1>Vérif anti-robot</h1><p>Clique sur tous les <b>feux rouges</b>.</p><div class="grid">'+tiles.map(function(t){return '<button class="tile">'+t+'</button>'}).join("")+'</div><button class="btn" id="v">Vérifier</button><p class="msg" id="m"></p>');
   var ts=st.querySelectorAll(".tile");
   ts.forEach(function(b){b.onclick=function(){b.classList.toggle("sel")}});
   document.getElementById("v").onclick=function(){
     tries++;
     ts.forEach(function(b){b.classList.remove("sel")});
-    if(tries>=3){msg("Bon… en vrai y’avait aucun feu rouge. Mais t’as insisté, t’es humain 🤖❌");setTimeout(s3,1800)}
+    if(tries>=3){msg("Bon… en vrai y’avait aucun feu rouge. Mais t’as insisté, t’es humain 🤖❌");setTimeout(next,1800)}
     else{fails++;msg(errs[tries-1])}
   };
 }
 
-function s3(){
+function pRun(){
   var d=0;
-  show(3,'<h1>Passe à la suite</h1><p>Pour avancer, il faut <span id="kw">cliquer</span> sur le bouton ci-dessous.</p><div class="arena" id="ar"><button class="btn" id="go">Continuer</button></div><p class="msg" id="m"></p>');
+  show('<h1>Passe à la suite</h1><p>Pour avancer, il faut <span id="kw">cliquer</span> sur le bouton ci-dessous.</p><div class="arena" id="ar"><button class="btn" id="go">Continuer</button></div><p class="msg" id="m"></p>');
   var ar=document.getElementById("ar"),go=document.getElementById("go"),kw=document.getElementById("kw");
   var hints=["Raté 😏","Trop lent.","Presque !","Hehe.","Allez encore…","Il est plus rapide que toi."];
   function dodge(e){
@@ -87,33 +136,73 @@ function s3(){
   go.addEventListener("pointerenter",dodge);
   go.addEventListener("pointerdown",dodge);
   go.onclick=function(e){e.preventDefault()};
-  kw.onclick=function(){s4(0)};
+  kw.onclick=function(){next()};
 }
 
-function s4(i){
-  var rev="je ne suis pas un robot";
-  var qs=[
-    {q:"Tape « "+rev+" » à l’envers",ok:function(a){return a===rev.split("").reverse().join("")}},
-    {q:"Combien font 7 × 8 ? (indice : c’est pas 54)",ok:function(a){return a==="56"}},
-    {q:"Quelle est la couleur du cheval blanc d’Henri IV ?",ok:function(a){return a.indexOf("blanc")>-1}}
-  ];
-  show(4,'<h1>Questions à la con ('+(i+1)+'/3)</h1><p>'+qs[i].q+'</p><input id="a" autocomplete="off"><button class="btn" id="ok">Valider</button><p class="msg" id="m"></p>');
-  var inp=document.getElementById("a");
-  async function submit(){
-    var v=inp.value.trim();
-    if(i===0&&v.toUpperCase()==="YES"){
-      return admin();
-    }
-    if(qs[i].ok(v.toLowerCase())){i+1<qs.length?s4(i+1):end()}
-    else{fails++;s4(0);msg("Faux. On recommence depuis la question 1 😈")}
+function pStroop(){
+  var C=[["rouge","#e53935"],["bleu","#1e88e5"],["vert","#43a047"],["jaune","#f9a825"],["violet","#8e24aa"]],ok=0,need=3;
+  function rnd(m){
+    var w=pick(C),c;do{c=pick(C)}while(c===w);
+    show('<h1>Pas si vite</h1><p>Clique sur la <b>couleur du texte</b>, pas sur le mot ('+(ok+1)+'/'+need+')</p><div class="big" style="color:'+c[1]+'">'+w[0].toUpperCase()+'</div><div id="pd"></div><p class="msg" id="m"></p>');
+    if(m)msg(m);
+    C.forEach(function(x){
+      var b=document.createElement("button");b.className="btn";b.textContent=x[0];
+      b.onclick=function(){if(x===c){ok++;ok>=need?next():rnd()}else{fails++;ok=0;rnd("Faux. On repart à zéro 😈")}};
+      document.getElementById("pd").append(b);
+    });
   }
-  document.getElementById("ok").onclick=submit;
-  inp.onkeydown=function(e){if(e.key==="Enter")submit()};
+  rnd();
 }
+
+function pSimon(){
+  var cols=["#e53935","#1e88e5","#43a047","#fdd835"];
+  function round(m){
+    var sq=[],k=0,lock=true,pads=[];
+    for(var i=0;i<4;i++)sq.push(R(4));
+    show('<h1>Mémoire</h1><p>Regarde la séquence, puis répète-la.</p><div class="sim" id="sm"></div><p class="msg" id="m"></p>');
+    if(m)msg(m);
+    function flash(i,ms){pads[i].classList.add("on");setTimeout(function(){pads[i].classList.remove("on")},ms)}
+    cols.forEach(function(c,i){
+      var b=document.createElement("button");b.className="pad";b.style.background=c;
+      b.onclick=function(){
+        if(lock)return;flash(i,150);
+        if(i===sq[k]){k++;if(k>=sq.length){lock=true;setTimeout(next,300)}}
+        else{lock=true;fails++;round("Raté, nouvelle séquence 😈")}
+      };
+      pads.push(b);document.getElementById("sm").append(b);
+    });
+    sq.forEach(function(s,j){setTimeout(function(){flash(s,400)},800+j*700)});
+    setTimeout(function(){lock=false},800+sq.length*700);
+  }
+  round();
+}
+
+function pHold(){
+  var need=8000,t=0,iv=null;
+  show('<h1>Patience</h1><p>Maintiens le bouton enfoncé <b>8 secondes</b>, sans lâcher.</p><div class="bar"><i id="br"></i></div><button class="btn" id="hb">Maintenir</button><p class="msg" id="m"></p>');
+  var b=document.getElementById("hb"),br=document.getElementById("br");
+  function stop(){clearInterval(iv);iv=null;if(t>0){fails++;msg("Tu as lâché 😈 Retour à zéro.")}t=0;br.style.width="0"}
+  b.onpointerdown=function(e){
+    e.preventDefault();if(iv)return;msg("");
+    iv=setInterval(function(){t+=100;br.style.width=(t/need*100)+"%";if(t>=need){clearInterval(iv);iv=null;next()}},100);
+  };
+  ["pointerup","pointerleave","pointercancel"].forEach(function(ev){b["on"+ev]=function(){if(iv)stop()}});
+  b.oncontextmenu=function(e){e.preventDefault()};
+}
+
+function pCount(){
+  var n=13+R(11),c=0;
+  show('<h1>Précision</h1><p>Clique <b>exactement '+n+' fois</b> sur « Clic », puis valide. Y’a pas de compteur 😈</p><button class="btn" id="c">Clic</button><button class="btn alt" id="v">Valider</button><p class="msg" id="m"></p>');
+  document.getElementById("c").onclick=function(){c++};
+  document.getElementById("v").onclick=function(){if(c===n)next();else{fails++;c=0;msg("Faux. Compteur remis à zéro, recommence 😈")}};
+}
+
+var P=[pRiddle,pRiddle,pMath,pRev,pSeq,pTimer,pCaptcha,pRun,pStroop,pSimon,pHold,pCount];
 
 function end(){
   var s=Math.round((Date.now()-t0)/1000);
-  show(4,'<h1>🎉 Bien joué</h1><p>T’as galéré <b>'+s+' s</b> et raté <b>'+fails+'</b> fois. Voilà ton lien :</p><div id="lk"></div>');
+  cur="";pr.textContent="Terminé";
+  st.innerHTML='<h1>🎉 Bien joué</h1><p>T’as galéré <b>'+s+' s</b> et raté <b>'+fails+'</b> fois. Voilà ton lien :</p><div id="lk"></div>';
   var box=document.getElementById("lk");
   S.links.forEach(function(l){
     var a=document.createElement("a");a.className="btn";a.target="_blank";a.rel="noopener";
@@ -124,10 +213,10 @@ function end(){
 }
 
 function admin(){
-  var L=S.links.map(function(l){return{label:l.label,url:l.url}}),T=S.timer;
+  var L=S.links.map(function(l){return{label:l.label,url:l.url}}),T=S.timer,N=S.steps||5;
   function draw(){
-    show(0,'<h1>Mode admin 🛠️</h1><p>Timer (secondes)<input class="n" id="t" type="number" min="0" max="120" value="'+T+'"></p><div id="ls"></div><button class="btn alt" id="add">+ Ajouter un lien</button><p><button class="btn" id="sv">Enregistrer et publier</button><button class="btn alt" id="qt">Quitter</button></p><p class="msg" id="m"></p>');
-    pr.textContent="Mode admin";
+    clearInterval(timer);cur="";pr.textContent="Mode admin";
+    st.innerHTML='<h1>Mode admin 🛠️</h1><p>Timer (secondes)<input class="n" id="t" type="number" min="0" max="120" value="'+T+'"></p><p>Nombre d’étapes<input class="n" id="s" type="number" min="1" max="12" value="'+N+'"></p><div id="ls"></div><button class="btn alt" id="add">+ Ajouter un lien</button><p><button class="btn" id="sv">Enregistrer et publier</button><button class="btn alt" id="qt">Quitter</button></p><p class="msg" id="m"></p>';
     var box=document.getElementById("ls");
     L.forEach(function(l,idx){
       var r=document.createElement("div");r.className="row";
@@ -137,24 +226,26 @@ function admin(){
       r.append(a,b,x);box.append(r);
     });
     document.getElementById("t").oninput=function(){T=+this.value};
+    document.getElementById("s").oninput=function(){N=+this.value};
     document.getElementById("add").onclick=function(){L.push({label:"",url:""});draw()};
-    document.getElementById("qt").onclick=function(){fails=0;s1()};
+    document.getElementById("qt").onclick=function(){start()};
     document.getElementById("sv").onclick=async function(){
       if(!A)return msg("Publication indisponible ici.");
       var links=L.map(function(l){return{label:l.label.trim(),url:l.url.trim()}}).filter(function(l){return l.url});
       links.forEach(function(l){if(!/^https?:\/\//i.test(l.url))l.url="https://"+l.url});
       if(!links.length)return msg("Ajoute au moins un lien.");
-      var ns={timer:Math.max(0,Math.min(120,T||0)),links:links};
+      var ns={timer:Math.max(0,Math.min(120,T||0)),steps:Math.max(1,Math.min(P.length,N||5)),links:links};
       var d=document.documentElement.cloneNode(true);
       d.querySelector("#stage").innerHTML="";d.querySelector("#prog").textContent="";
       d.querySelector("#state").textContent=JSON.stringify(ns).replace(/</g,"\\u003c");
       msg("Publication…");
-      try{await A.publish("<!doctype html>\n"+d.outerHTML)}catch(e){msg((e&&(e.code==="not_writer"||e.code==="not_granted"))?"Seul le propriétaire de la page peut enregistrer.":"Échec : "+((e&&e.code)||"erreur"))}
+      try{await A.publish("<!doctype html>\n"+d.outerHTML)}
+      catch(e){msg((e&&(e.code==="not_writer"||e.code==="not_granted"))?"Seul le propriétaire de la page peut enregistrer.":"Échec : "+((e&&e.code)||"erreur"))}
     };
   }
   draw();
 }
-s1();
+start();
 </script>
 </body>
 </html>
