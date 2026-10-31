@@ -39,11 +39,17 @@ input.n{width:90px;display:inline-block;margin:0 0 0 6px}
 </head>
 <body>
 <div class="card"><div id="prog"></div><div id="stage"></div></div>
-<script type="application/json" id="state">{"timer":15,"links":[{"label":"Ouvrir le lien","url":"https://exemple.com"}]}</script>
 <script>
-var S=JSON.parse(document.getElementById("state").textContent);
-var A=null;
-(async function(){if(!window.claude)return;try{A=await claude.use("artifact")}catch(e){}})();
+/* ===== CONFIG : modifie juste ici ===== */
+var S={
+  timer:15,  // secondes du compte à rebours (0 = pas de timer)
+  steps:1,   // nombre d’épreuves tirées au hasard (1 à 12)
+  links:[    // un lien par ligne : label = texte du bouton, url = ton lien
+    {label:"Ouvrir le lien",url:"https://www.twitch.tv/komiaaa"}
+    // ,{label:"Discord",url:"https://discord.gg/xxxx"}
+  ]
+};
+/* ===== FIN CONFIG ===== */
 var st=document.getElementById("stage"),pr=document.getElementById("prog");
 var fails=0,t0=Date.now(),timer=null,seq=[],idx=0,cur="";
 function R(n){return Math.floor(Math.random()*n)}
@@ -58,10 +64,6 @@ function start(){
   seq=shuf(P).slice(0,Math.max(1,Math.min(S.steps||5,P.length)));
   next();
 }
-
-/* admin : 7 clics rapides sur « Étape x / y » */
-var tc=0,tt=0;
-pr.onclick=function(){var n=Date.now();if(n-tt>2000)tc=0;tt=n;if(++tc>=7){tc=0;admin()}};
 
 function ask(h,gen,ok,m){
   var g=gen();
@@ -212,39 +214,6 @@ function end(){
   });
 }
 
-function admin(){
-  var L=S.links.map(function(l){return{label:l.label,url:l.url}}),T=S.timer,N=S.steps||5;
-  function draw(){
-    clearInterval(timer);cur="";pr.textContent="Mode admin";
-    st.innerHTML='<h1>Mode admin 🛠️</h1><p>Timer (secondes)<input class="n" id="t" type="number" min="0" max="120" value="'+T+'"></p><p>Nombre d’étapes<input class="n" id="s" type="number" min="1" max="12" value="'+N+'"></p><div id="ls"></div><button class="btn alt" id="add">+ Ajouter un lien</button><p><button class="btn" id="sv">Enregistrer et publier</button><button class="btn alt" id="qt">Quitter</button></p><p class="msg" id="m"></p>';
-    var box=document.getElementById("ls");
-    L.forEach(function(l,idx){
-      var r=document.createElement("div");r.className="row";
-      var a=document.createElement("input");a.placeholder="Nom du bouton";a.value=l.label;a.oninput=function(){l.label=a.value};
-      var b=document.createElement("input");b.placeholder="https://…";b.value=l.url;b.oninput=function(){l.url=b.value};
-      var x=document.createElement("button");x.className="btn alt";x.textContent="✕";x.onclick=function(){L.splice(idx,1);draw()};
-      r.append(a,b,x);box.append(r);
-    });
-    document.getElementById("t").oninput=function(){T=+this.value};
-    document.getElementById("s").oninput=function(){N=+this.value};
-    document.getElementById("add").onclick=function(){L.push({label:"",url:""});draw()};
-    document.getElementById("qt").onclick=function(){start()};
-    document.getElementById("sv").onclick=async function(){
-      if(!A)return msg("Publication indisponible ici.");
-      var links=L.map(function(l){return{label:l.label.trim(),url:l.url.trim()}}).filter(function(l){return l.url});
-      links.forEach(function(l){if(!/^https?:\/\//i.test(l.url))l.url="https://"+l.url});
-      if(!links.length)return msg("Ajoute au moins un lien.");
-      var ns={timer:Math.max(0,Math.min(120,T||0)),steps:Math.max(1,Math.min(P.length,N||5)),links:links};
-      var d=document.documentElement.cloneNode(true);
-      d.querySelector("#stage").innerHTML="";d.querySelector("#prog").textContent="";
-      d.querySelector("#state").textContent=JSON.stringify(ns).replace(/</g,"\\u003c");
-      msg("Publication…");
-      try{await A.publish("<!doctype html>\n"+d.outerHTML)}
-      catch(e){msg((e&&(e.code==="not_writer"||e.code==="not_granted"))?"Seul le propriétaire de la page peut enregistrer.":"Échec : "+((e&&e.code)||"erreur"))}
-    };
-  }
-  draw();
-}
 start();
 </script>
 </body>
