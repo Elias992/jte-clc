@@ -102,11 +102,7 @@ function s4(i){
   async function submit(){
     var v=inp.value.trim();
     if(i===0&&v.toUpperCase()==="YES"){
-      await ready;
-      var ok=false;
-      try{ok=!!(U&&(await U.canEdit()))}catch(e){}
-      if(ok)return admin();
-      fails++;s4(0);msg("Accès admin refusé 😏 T’es pas le patron"+(U?"":" (vérification impossible : ouvre la page connecté à ton compte Claude)")+". On recommence.");return;
+      return admin();
     }
     if(qs[i].ok(v.toLowerCase())){i+1<qs.length?s4(i+1):end()}
     else{fails++;s4(0);msg("Faux. On recommence depuis la question 1 😈")}
@@ -153,7 +149,7 @@ function admin(){
       d.querySelector("#stage").innerHTML="";d.querySelector("#prog").textContent="";
       d.querySelector("#state").textContent=JSON.stringify(ns).replace(/</g,"\\u003c");
       msg("Publication…");
-      try{await A.publish("<!doctype html>\n"+d.outerHTML)}catch(e){msg("Échec : "+((e&&e.code)||"erreur"))}
+      try{await A.publish("<!doctype html>\n"+d.outerHTML)}catch(e){msg((e&&(e.code==="not_writer"||e.code==="not_granted"))?"Seul le propriétaire de la page peut enregistrer.":"Échec : "+((e&&e.code)||"erreur"))}
     };
   }
   draw();
